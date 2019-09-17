@@ -1,17 +1,21 @@
 from django.shortcuts import render
 
+from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework import filters
-from rest_framework import viewsets
-from rest_framework import status
+from rest_framework.authtoken.serializers import AuthTokenSerializer
 from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.settings import api_settings
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated
 
-from profiles_api import permissions
-from profiles_api import models
-from profiles_api import serializers
+from . import serializers
+from . import models
+from . import permissions
+
+# Create your views here.
 
 class HelloApiView(APIView):
     """Test API View."""
@@ -31,31 +35,32 @@ class HelloApiView(APIView):
         return Response({'message': 'Hello!', 'an_apiview': an_apiview})
 
     def post(self, request):
-        """create hello name with api request"""
-        serializer = self.serializer_class(data=request.data)
+        """Create a hello message with our name."""
+
+        serializer = serializers.HelloSerializer(data=request.data)
 
         if serializer.is_valid():
-            name = serializer.validated_data.get('name')
-            message = f'hello {name} '
-
-            return Response({'message':message})
+            name = serializer.data.get('name')
+            message = 'Hello {0}'.format(name)
+            return Response({'message': message})
         else:
             return Response(
-                serializer.errors,
-                status = status.HTTP_400_BAD_REQUEST
-            )
+                serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request, pk=None):
-         """Updates the object"""
-         return Response({'method': 'put'})
+        """Handles updating an object."""
+
+        return Response({'method': 'put'})
 
     def patch(self, request, pk=None):
-         """Updates partially the object"""
-         return Response({'method': 'patch'})
+        """Patch request, only updates fields provided in the request."""
+
+        return Response({'method': 'patch'})
 
     def delete(self, request, pk=None):
-         """Deletes the object"""
-         return Response({'method': 'delete'})
+        """Deletes and object."""
+
+        return Response({'method': 'delete'})
 
 
 class HelloViewSet(viewsets.ViewSet):
@@ -109,15 +114,36 @@ class HelloViewSet(viewsets.ViewSet):
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):
-    """handels creting and updating profile"""
+    """Handles creating, creating and updating profiles."""
 
     serializer_class = serializers.UserProfileSerializer
     queryset = models.UserProfile.objects.all()
     authentication_classes = (TokenAuthentication,)
     permission_classes = (permissions.UpdateOwnProfile,)
     filter_backends = (filters.SearchFilter,)
-    search_fields = ('name','email',)
+    search_fields = ('name', 'email',)
 
-class UserLoginApiView(ObtainAuthToken):
-    """hadles creating user authtoken"""
-    renderer_classes = api_settings.DEFAULT_RENDERER_CLASSES
+
+class LoginViewSet(viewsets.ViewSet):
+    """Checks email and password and returns an auth token."""
+
+    serializer_class = AuthTokenSerializer
+
+    def create(self, request):
+        """Use the ObtainAuthToken APIView to validate and create a token."""
+
+        return ObtainAuthToken().post(request)
+
+
+class UserProfileFeedViewSet(viewsets.ModelViewSet):
+    """Handles creating, reading and updating profile feed items."""
+
+    authentication_classes = (TokenAuthentication,)
+    serializer_class = serializers.ProfileFeedItemSerializer
+    queryset = models.ProfileFeedItem.objects.all()
+    permission_classes = (permissions.PostOwnStatus, IsAuthenticated)
+
+    def perform_create(self, serializer):
+        """Sets the user profile to the logged in user."""
+
+        serializer.save(user_profile=self.request.user)
